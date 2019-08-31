@@ -1,11 +1,10 @@
 // =======================================================================================
 //                 SHADOW :  Small Handheld Arduino Droid Operating Wand
 // =======================================================================================
-//                          Last Revised Date: 08/31/19
+//                          Last Revised Date: 10/05/14
 //                             Written By: KnightShade
 //                        Inspired by the PADAWAN by danf
 //                              Hacked By: CJE1985
-//                              Modded by: IOIIOOO
 // =======================================================================================
 //
 //         This program is free software: you can redistribute it and/or modify it .
@@ -30,19 +29,19 @@
 // ---------------------------------------------------------------------------------------
 
 //Primary Controller
-String PS3MoveNavigatonPrimaryMAC = "00:06:F7:C2:D6:C2"; //If using multiple controlers, designate a primary
+String PS3MoveNavigatonPrimaryMAC = "04:76:6E:5A:9A:5B"; //If using multiple controlers, designate a primary
 
 byte joystickDeadZoneRange = 10;  // For controllers that centering problems, use the lowest number with no drift
 
-int steeringNeutral = 93;        // Move this by one or two to set the center point for the steering servo
+int steeringNeutral = 90;        // Move this by one or two to set the center point for the steering servo
 
 #define reverseSteering          // Comment this to have normal stering direction (Lots of RC cars are built with reverseSteering by default)
-int steeringRightEndpoint = 160; // Move this down (below 180) if you need to set a narrower Right turning radius
+int steeringRightEndpoint = 120; // Move this down (below 180) if you need to set a narrower Right turning radius
 int steeringLeftEndpoint = 0;    // Move this up (above 0) if you need to set a narrower Left turning radius
 
 int driveNeutral = 91;           // Move this by one or two to set the center point for the drive ESC
-int maxForwardSpeed = 105;       // Move this down (below 180, but above 90) if you need a slower forward speed
-int maxReverseSpeed = 9;        // Move this up (above 0, but below 90) if you need a slower reverse speed
+int maxForwardSpeed = 115;       // Move this down (below 180, but above 90) if you need a slower forward speed
+int maxReverseSpeed = 65;        // Move this up (above 0, but below 90) if you need a slower reverse speed
 
 //#define TEST_CONROLLER         //Support coming soon
 //#define SHADOW_DEBUG           //uncomment this for console DEBUG output
@@ -66,37 +65,20 @@ int maxReverseSpeed = 9;        // Move this up (above 0, but below 90) if you n
 #define MDFly                    // Use the MDFly MP3 Player
 //#define RogueRMP3              // Use the Rogue RMP3 Player
 
-uint8_t SoundsGroup[15] = { 1, 5, 6, 2, 7, 8, 3, 9, 10, 4, 12, 13, 14 };
-uint8_t AlertSoundsGroup[15] = { 1, 1, 1 };
-uint8_t DoDoSoundsGroup[15] = { 2, 7, 8 };
-uint8_t ScrambleSoundsGroup[15] = { 3, 9, 10 };
-uint8_t HornSoundsGroup[15] = { 4, 12, 13, 14 };
-uint8_t DroidSoundsGroup[15] = { 15, 16, 17, 18, 19 };
-uint8_t ZapSoundsGroup[15] = { 5, 6 };
-uint8_t startupSound = 24;
-uint8_t imperialMarchSong = 22;
-uint8_t cantinaSong = 20;
-uint8_t SWSong = 21;
-uint8_t MSESong = 23;
-uint8_t playSound;
-uint8_t lastSound;
-uint8_t soundType;
-uint8_t lastSoundType;
-
-// Sound Automation Variables
-
-byte soundAutoMinTime = 8;   // Time between random sounds
-byte soundAutoMaxTime = 20;  // Time between random sounds
-
-boolean playAutoSounds = false;
-unsigned long soundStartTime = 0;  // millis() when next turn should start
-int soundStatus = 0;  // 0 = stopped, 1 = ready to play
 
 // ---------------------------------------------------------------------------------------
 //                          Libraries
 // ---------------------------------------------------------------------------------------
 #include <PS3BT.h>
 #include <Servo.h>
+
+
+#ifdef RogueRMP3
+#include <RogueMP3.h>
+#include <SoftwareSerial.h>
+SoftwareSerial rmp3_s = SoftwareSerial(MP3TxPin, MP3RxPin);
+RogueMP3 MP3(rmp3_s);
+#endif
 
 
 #ifdef Sparkfun
@@ -141,13 +123,11 @@ boolean isDriveMotorStopped = true;
 boolean isPS3NavigatonInitialized = false;
 boolean isSecondaryPS3NavigatonInitialized = false;
 
-byte vol = 16;                   // 0 = full volume, 255 off for MP3Trigger, the MDFly use a 0-31 vol range
+byte vol = 0;                   // 0 = full volume, 255 off for MP3Trigger, the MDFly use a 0-31 vol range
 boolean isStickEnabled = true;
 
 byte action = 0;
 unsigned long DriveMillis = 0;
-
-boolean wasDriving = false;  // used to track driving status
 
 Servo steeringSignal;
 Servo driveSignal;
@@ -161,7 +141,6 @@ int prevSteeringValue, prevDriveValue; //will hold steering/drive speed values (
 
 void setup()
 {
-  
   //Debug Serial for use with USB Debugging
   Serial.begin(115200);
   while (!Serial); // Wait for serial port to connect - used on Leonardo, Teensy and other boards with built-in USB CDC serial connection
@@ -177,8 +156,15 @@ void setup()
   PS3Nav->attachOnInit(onInitPS3); // onInit() is called upon a new connection - you can call the function whatever you like
   PS3Nav2->attachOnInit(onInitPS3Nav2);
 
-  // random seed
-  randomSeed(analogRead(0));
+
+#ifdef RogueRMP3
+  rmp3_s.begin(9600);
+  MP3.sync();
+  MP3.stop();
+  MP3.setVolume(vol);
+  Serial.print(F("\r\nRogue rMP3 Initialized"));
+#endif
+
 
 #ifdef Sparkfun
   //Setup for SoftwareSerial/MP3 Trigger
@@ -196,14 +182,6 @@ void setup()
   Serial.print(F("\r\nMSE Drive Running"));
   steeringSignal.attach(steeringPin);
   driveSignal.attach(drivePin);
-
-  #ifdef MDFly
-        MP3.play(startupSound);
-  #endif
-
-  #ifdef Sparkfun
-        MP3.trigger(startupSound);
-  #endif
 }
 
 boolean readUSB()
@@ -246,10 +224,6 @@ void loop()
   toggleSettings();
   soundControl();
   flushAndroidTerminal();
-
-  if (playAutoSounds) {
-    autoSounds();
-  }
 }
 
 void onInitPS3()
@@ -524,11 +498,11 @@ void ps3ToggleSettings(PS3BT* myPS3 = PS3Nav)
   //// enable / disable right stick & play sound
   if (myPS3->getButtonPress(PS) && myPS3->getButtonClick(CROSS))
   {
- #ifdef SHADOW_DEBUG
-          output += "Disabling the DriveStick\r\n";
-  #endif
+#ifdef SHADOW_DEBUG
+    output += "Disiabling the DriveStick\r\n";
+#endif
     isStickEnabled = false;
-    processSoundCommand('5');
+    //        MP3.play(52);
   }
   if (myPS3->getButtonPress(PS) && myPS3->getButtonClick(CIRCLE))
   {
@@ -536,7 +510,7 @@ void ps3ToggleSettings(PS3BT* myPS3 = PS3Nav)
     output += "Enabling the DriveStick\r\n";
 #endif
     isStickEnabled = true;
-    processSoundCommand('6');
+    ///        MP3.play(53);
   }
 }
 
@@ -548,9 +522,14 @@ void processSoundCommand(char soundCommand)
 #ifdef SHADOW_DEBUG
       output += "Volume Down\r\n";
 #endif
-
       if (vol > 0)
       {
+
+#ifdef RogueRMP3
+        vol = vol-10;
+        if (vol < 0 ) { vol = 0; }
+        MP3.setVolume(vol);
+#endif
 
 #ifdef MDFly
         vol--;
@@ -568,6 +547,14 @@ void processSoundCommand(char soundCommand)
     case '+':
 #ifdef SHADOW_DEBUG
       output += "Volume Up\r\n";
+#endif
+
+#ifdef RogueRMP3
+        if (vol < 255) {
+          vol = vol+10;
+          if (vol > 255 ) { vol = 255 ;}
+          MP3.setVolume(vol);
+        }
 #endif
 
 #ifdef MDFly
@@ -596,30 +583,20 @@ void processSoundCommand(char soundCommand)
         output += " - Play Scream\r\n";
 #endif
 
-  do { 
-    playSound = random(0,3);
-  } while (playSound == lastSound);
+#ifdef MDFly
+        MP3.play(1);
+#endif
 
-        #ifdef SHADOW_DEBUG
-          output += "Play Sound ";
-          output += playSound;
-          output += "\r\n";
-          output += "LastSound ";
-          output += lastSound;
-          output += "\r\n";
-        #endif
-    
-    #ifdef MDFly
-        MP3.play(AlertSoundsGroup[playSound]);
-    #endif
+#ifdef Sparkfun
+        MP3.trigger(1);
+#endif
 
-    #ifdef Sparkfun
-        MP3.trigger(AlertSoundsGroup[playSound]);
-    #endif
+#ifdef RogueRMP3
+        MP3.playFile("/MSE01.mp3");
+#endif
 
-  lastSound = playSound;
 
-      break;
+        break;
       case '2':
 #ifdef SHADOW_DEBUG
         output += "Sound Button ";
@@ -627,28 +604,17 @@ void processSoundCommand(char soundCommand)
         output += " - Play Doo Doo.\r\n";
 #endif
 
-        do { 
-          playSound = random(0,3);
-        } while (playSound == lastSound);
+#ifdef RogueRMP3
+        MP3.playFile("/MSE02.mp3");
+#endif
 
-        #ifdef SHADOW_DEBUG
-          output += "Play Sound ";
-          output += playSound;
-          output += "\r\n";
-          output += "LastSound ";
-          output += lastSound;
-          output += "\r\n";
-        #endif
+#ifdef MDFly
+        MP3.play(2);
+#endif
 
-        #ifdef MDFly
-          MP3.play(DoDoSoundsGroup[playSound]);
-        #endif
-
-        #ifdef Sparkfun
-          MP3.trigger(DoDoSoundsGroup[playSound]);
-        #endif
-        
-        lastSound = playSound;
+#ifdef Sparkfun
+        MP3.trigger(2);
+#endif
 
         break;
       case '3':
@@ -657,227 +623,278 @@ void processSoundCommand(char soundCommand)
         output += soundCommand;
         output += " - Play Scramble\r\n";
 #endif
-        do { 
-          playSound = random(0,3);
-        } while (playSound == lastSound);
 
-        #ifdef SHADOW_DEBUG
-          output += "Play Sound ";
-          output += playSound;
-          output += "\r\n";
-          output += "LastSound ";
-          output += lastSound;
-          output += "\r\n";
-        #endif
+#ifdef RogueRMP3
+        MP3.playFile("/MSE03.mp3");
+#endif
 
-        #ifdef MDFly
-          MP3.play(ScrambleSoundsGroup[playSound]);
-        #endif
+#ifdef MDFly
+        MP3.play(3);
+#endif
 
-        #ifdef Sparkfun
-          MP3.trigger(ScrambleSoundsGroup[playSound]);
-        #endif
-        
-        lastSound = playSound;
+#ifdef Sparkfun
+        MP3.trigger(3);
+#endif
 
         break;
         case '4':
 #ifdef SHADOW_DEBUG
         output += "Sound Button ";
         output += soundCommand;
-        output += " - Play Horns\r\n";
+        output += " - Play Scramble\r\n";
 #endif
-        do { 
-          playSound = random(0,4);
-        } while (playSound == lastSound);
 
-        #ifdef SHADOW_DEBUG
-          output += "Play Sound ";
-          output += playSound;
-          output += "\r\n";
-          output += "LastSound ";
-          output += lastSound;
-          output += "\r\n";
-        #endif
+#ifdef RogueRMP3
+        MP3.playFile("/Mouse Droid Song.mp3");
+#endif
 
-        #ifdef MDFly
-          MP3.play(HornSoundsGroup[playSound]);
-        #endif
+#ifdef MDFly
+        MP3.play(4);
+#endif
 
-        #ifdef Sparkfun
-          MP3.trigger(HornSoundsGroup[playSound]);
-        #endif
-        
-        lastSound = playSound;
+#ifdef Sparkfun
+        MP3.trigger(4);
+#endif
 
         break;
       case '5':
 #ifdef SHADOW_DEBUG
         output += "Sound Button ";
         output += soundCommand;
-        output += " - Play Zap Sound.\r\n";
+        output += " - Play Mouse Sound.\r\n";
 #endif
 
-        do { 
-          playSound = random(0,2);
-        } while (playSound == lastSound);
+#ifdef RogueRMP3
+        MP3.playFile("/MSE04.mp3");
+#endif
 
-        #ifdef SHADOW_DEBUG
-          output += "Play Sound ";
-          output += playSound;
-          output += "\r\n";
-          output += "LastSound ";
-          output += lastSound;
-          output += "\r\n";
-        #endif
+#ifdef MDFly
+        MP3.play(5);
+#endif
 
-        #ifdef MDFly
-          MP3.play(ZapSoundsGroup[playSound]);
-        #endif
-
-        #ifdef Sparkfun
-          MP3.trigger(ZapSoundsGroup[playSound]);
-        #endif
-        
-        lastSound = playSound;
+#ifdef Sparkfun
+        MP3.trigger(5);
+#endif
 
         break;
       case '6':
 #ifdef SHADOW_DEBUG
         output += "Sound Button ";
         output += soundCommand;
-        output += " - Play Droid Sound.\r\n";
+        output += " - Play Crank Sound.\r\n";
 #endif
 
-        do { 
-          playSound = random(0,5);
-        } while (playSound == lastSound);
+#ifdef RogueRMP3
+        MP3.playFile("/MSE05.mp3");
+#endif
 
-        #ifdef SHADOW_DEBUG
-          output += "Play Sound ";
-          output += playSound;
-          output += "\r\n";
-          output += "LastSound ";
-          output += lastSound;
-          output += "\r\n";
-        #endif
+#ifdef MDFly
+        MP3.play(6);
+#endif
 
-        #ifdef MDFly
-          MP3.play(DroidSoundsGroup[playSound]);
-        #endif
+#ifdef Sparkfun
+        MP3.trigger(6);
+#endif
 
-        #ifdef Sparkfun
-          MP3.trigger(DroidSoundsGroup[playSound]);
-        #endif
-        
-        lastSound = playSound;
         break;
-        
       case '7':
-      #ifdef SHADOW_DEBUG
+#ifdef SHADOW_DEBUG
         output += "Sound Button ";
         output += soundCommand;
-        output += " - Play Imperial March.\r\n";
-      #endif
+        output += " - Play Splat.\r\n";
+#endif
 
-      #ifdef MDFly
-        MP3.play(imperialMarchSong);
-      #endif
+#ifdef RogueRMP3
+        MP3.playFile("/MSE06.mp3");
+#endif
 
-      #ifdef Sparkfun
-        MP3.trigger(imperialMarchSong);
-      #endif
+#ifdef MDFly
+        MP3.play(7);
+#endif
+
+#ifdef Sparkfun
+        MP3.trigger(7);
+#endif
 
         break;
       case '8':
-      #ifdef SHADOW_DEBUG
+#ifdef SHADOW_DEBUG
         output += "Sound Button ";
         output += soundCommand;
-        output += " - Play Cantina Song.\r\n";
-      #endif
+        output += " - Play Electrical.\r\n";
+#endif
 
-      #ifdef MDFly
-        MP3.play(cantinaSong);
-      #endif
+#ifdef RogueRMP3
+        MP3.playFile("/March.mp3");
+#endif
 
-      #ifdef Sparkfun
-        MP3.trigger(cantinaSong);
-      #endif
+#ifdef MDFly
+        MP3.play(8);
+#endif
+
+#ifdef Sparkfun
+        MP3.trigger(15);
+#endif
 
         break;
       case '9':
-      #ifdef SHADOW_DEBUG
+#ifdef SHADOW_DEBUG
         output += "Sound Button ";
         output += soundCommand;
-        output += " - Play SW Theme Song.\r\n";
-      #endif
+        output += " - Play March L1+L.\r\n";
+#endif
 
-      #ifdef MDFly
-        MP3.play(SWSong);
-      #endif
+#ifdef RogueRMP3
+        MP3.playFile("/MSE10.mp3");
+#endif
 
-      #ifdef Sparkfun
-        MP3.trigger(SWSong);
-      #endif
+#ifdef MDFly
+        MP3.play(9);
+#endif
+
+#ifdef Sparkfun
+        MP3.trigger(18);
+#endif
 
         break;
       case '0':
-      #ifdef SHADOW_DEBUG
+#ifdef SHADOW_DEBUG
         output += "Sound Button ";
         output += soundCommand;
-        output += " - Play MSE Song.\r\n";
-      #endif
+        output += " - Play Cantina L1+R\r\n";
+#endif
 
-      #ifdef MDFly
-        MP3.play(MSESong);
-      #endif
+#ifdef RogueRMP3
+        MP3.playFile("/MSE11.mp3");
+#endif
 
-      #ifdef Sparkfun
-        MP3.trigger(MSESong);
-      #endif
+#ifdef MDFly
+        MP3.play(10);
+#endif
+
+#ifdef Sparkfun
+        MP3.trigger(19);
+#endif
 
         break;
       case 'A':
+#ifdef SHADOW_DEBUG
+        output += "Sound Button ";
+        output += soundCommand;
+        output += " - Play Jabba Flow L1+O\r\n";
+#endif
+
+#ifdef RogueRMP3
+        MP3.playFile("/Cantina.mp3");
+#endif
+
+#ifdef MDFly
+        MP3.play(11);
+#endif
+
+#ifdef Sparkfun
+        MP3.trigger(20);
+#endif
 
         break;
       case 'B':
+#ifdef SHADOW_DEBUG
+        output += "Sound Button ";
+        output += soundCommand;
+        output += " - Play SWG Music L1+X\r\n";
+#endif
+
+#ifdef RogueRMP3
+        MP3.playFile("/March.mp3");
+#endif
+
+#ifdef MDFly
+        MP3.play(12);
+#endif
+
+#ifdef Sparkfun
+        MP3.trigger(21);
+#endif
 
         break;
       case 'C':
-        #ifdef SHADOW_DEBUG
-      output += "Volume Max\r\n";
-      #endif
-      
-      #ifdef MDFly
-              vol = 30;
-              MP3.setVol(vol);
-      #endif
-      
-      #ifdef Sparkfun
-              vol = 255;
-              MP3.setVolume(vol);
-      #endif
+#ifdef SHADOW_DEBUG
+        output += "Sound Button ";
+        output += soundCommand;
+        output += " - Play MSE Loop L1+L3\r\n";
+#endif
+
+#ifdef RogueRMP3
+        MP3.playFile("/StarWars.mp3");
+#endif
+
+#ifdef MDFly
+        MP3.play(13);
+#endif
+
+#ifdef Sparkfun
+        MP3.trigger(22);
+#endif
 
         break;
       case 'D':
-      #ifdef SHADOW_DEBUG
-      output += "Volume Mid\r\n";
-      #endif
-      
-      #ifdef MDFly
-              vol = 16;
-              MP3.setVol(vol);
-      #endif
-      
-      #ifdef Sparkfun
-              vol = 127;
-              MP3.setVolume(vol);
-      #endif
+#ifdef SHADOW_DEBUG
+        output += "Sound Button ";
+        output += soundCommand;
+        output += " - Play Meco StarWars L1+PS\r\n";
+#endif
+
+#ifdef RogueRMP3
+        MP3.playFile("/Mouse Droid Song.mp3");
+#endif
+
+#ifdef MDFly
+        MP3.play(14);
+#endif
+
+#ifdef Sparkfun
+        MP3.trigger(23);
+#endif
+
         break;
       case 'E':
+#ifdef SHADOW_DEBUG
+        output += "Sound Button ";
+        output += soundCommand;
+        output += " - Play Meco StarWars L1+PS\r\n";
+#endif
+
+#ifdef RogueRMP3
+        MP3.playFile("/meco-sw-disco.mp3");
+#endif
+
+#ifdef MDFly
+        MP3.play(15);
+#endif
+
+#ifdef Sparkfun
+        MP3.trigger(23);
+#endif
 
         break;
       case 'F':
+#ifdef SHADOW_DEBUG
+        output += "Sound Button ";
+        output += soundCommand;
+        output += " - Play Meco StarWars L1+PS\r\n";
+#endif
+
+#ifdef RogueRMP3
+        MP3.playFile("/the saga begins - wierd al yankovic.mp3");
+#endif
+
+#ifdef MDFly
+        MP3.play(16);
+#endif
+
+#ifdef Sparkfun
+        MP3.trigger(23);
+#endif
 
         break;
       case 'R':
@@ -887,48 +904,17 @@ void processSoundCommand(char soundCommand)
         output += " - Play Random Mouse Sound. L3\r\n";
 #endif
 
-    do {
-      soundType = random(1,4);
-    } while (soundType == lastSoundType);
+#ifdef RogueRMP3
+        MP3.playFile("/WALLE.mp3");
+#endif
 
-    if (soundType == 1) {
-      playSound = random(0,3);
-      #ifdef MDFly
-        MP3.play(DoDoSoundsGroup[playSound]);
-      #endif
-      #ifdef Sparkfun
-        MP3.trigger(DoDoSoundsGroup[playSound]);
-      #endif
-      
-    } else if (soundType == 2) {
-      playSound = random(0,3);
-      #ifdef MDFly
-        MP3.play(ScrambleSoundsGroup[playSound]);
-      #endif
-      #ifdef Sparkfun
-        MP3.trigger(ScrambleSoundsGroup[playSound]);
-      #endif
-      
-    } else if (soundType == 3) {
-       playSound = random(0,4);
-      #ifdef MDFly
-        MP3.play(HornSoundsGroup[playSound]);
-      #endif
-      #ifdef Sparkfun
-        MP3.trigger(HornSoundsGroup[playSound]);
-      #endif
-      
-    } else if (soundType == 4) {
-      playSound = random(0,5);
-      #ifdef MDFly
-        MP3.play(DroidSoundsGroup[playSound]);
-      #endif
-      #ifdef Sparkfun
-        MP3.trigger(DroidSoundsGroup[playSound]);
-      #endif
-    }
+#ifdef MDFly
+        MP3.play(random(1, 15));
+#endif
 
-    lastSoundType = soundType;
+#ifdef Sparkfun
+        MP3.trigger(random(1, 15));
+#endif
 
         break;
       default:
@@ -937,6 +923,11 @@ void processSoundCommand(char soundCommand)
 #endif
 
         output += "Invalid Sound Command\r\n";
+
+#ifdef RogueRMP3
+        //Add a valid track here?
+        MP3.playFile("/WALLE.mp3");
+#endif
 
 #ifdef MDFly
         MP3.play(60);
@@ -951,30 +942,12 @@ void processSoundCommand(char soundCommand)
   void ps3soundControl(PS3BT* myPS3 = PS3Nav, int controllerNumber = 1)
   {
     if (!(myPS3->getButtonPress(L1) || myPS3->getButtonPress(L2) || myPS3->getButtonPress(PS))) {
-      if (myPS3->getButtonClick(UP))          processSoundCommand('2'); // DoDos
-      else if (myPS3->getButtonClick(RIGHT))  processSoundCommand('3'); // Scrambles
-      else if (myPS3->getButtonClick(DOWN))   processSoundCommand('4'); // Horns
-      else if (myPS3->getButtonClick(LEFT))   processSoundCommand('6'); // Droids
-      else if (myPS3->getButtonClick(CROSS))  processSoundCommand('5'); // Zaps
-      else if (myPS3->getButtonClick(CIRCLE)) processSoundCommand('1'); // Scream
-      else if (myPS3->getButtonClick(L3))     processSoundCommand('R'); // Random
-    }
-    else if (myPS3->getButtonPress(L1)) {
-      if (myPS3->getButtonClick(UP))          processSoundCommand('7'); // Imperial March
-      else if (myPS3->getButtonClick(RIGHT))  processSoundCommand('8'); // Cantina
-      else if (myPS3->getButtonClick(DOWN))   processSoundCommand('9'); // Star Wars Theme
-      else if (myPS3->getButtonClick(LEFT))   processSoundCommand('0'); // MSE Droid Song
-      else if (myPS3->getButtonClick(CIRCLE)) startAutoSounds();
-      else if (myPS3->getButtonClick(CROSS))  stopAutoSounds();
-      else if (myPS3->getButtonClick(L3))     processSoundCommand('R'); 
-    }
-    else if (myPS3->getButtonPress(PS)) {
-      if (myPS3->getButtonClick(UP))          processSoundCommand('+'); // volume up
-      else if (myPS3->getButtonClick(DOWN))   processSoundCommand('-'); // volume down
-      else if (myPS3->getButtonClick(LEFT))   processSoundCommand('D'); // volume mid
-      else if (myPS3->getButtonClick(RIGHT))  processSoundCommand('C'); // volume max
-      else if (myPS3->getButtonClick(CIRCLE)) processSoundCommand('E'); // Enable Drive
-      else if (myPS3->getButtonClick(CROSS))  processSoundCommand('F'); // Disable Drive
+      if (myPS3->getButtonClick(UP))          processSoundCommand('1');
+      else if (myPS3->getButtonClick(RIGHT))  processSoundCommand('2');
+      else if (myPS3->getButtonClick(DOWN))   processSoundCommand('3');
+      else if (myPS3->getButtonClick(LEFT))   processSoundCommand('4');
+      else if (myPS3->getButtonClick(CROSS))  processSoundCommand('5');
+      else if (myPS3->getButtonClick(CIRCLE)) processSoundCommand('6');
       else if (myPS3->getButtonClick(L3))     processSoundCommand('R');
     }
     else if (myPS3->getButtonPress(L2)) {
@@ -985,6 +958,16 @@ void processSoundCommand(char soundCommand)
       else if (myPS3->getButtonClick(CIRCLE)) processSoundCommand('A');
       else if (myPS3->getButtonClick(CROSS))  processSoundCommand('B');
       else if (myPS3->getButtonClick(L3))     processSoundCommand('R');
+    }
+    else if (myPS3->getButtonPress(L1)) {
+      if (myPS3->getButtonClick(UP))          processSoundCommand('+');
+      else if (myPS3->getButtonClick(DOWN))   processSoundCommand('-');
+      else if (myPS3->getButtonClick(LEFT))   processSoundCommand('C');
+      else if (myPS3->getButtonClick(RIGHT))  processSoundCommand('D');
+      else if (myPS3->getButtonClick(CIRCLE)) processSoundCommand('E');
+      else if (myPS3->getButtonClick(CROSS))  processSoundCommand('F');
+      else if (myPS3->getButtonClick(L3))     processSoundCommand('R');
+      else if (myPS3->getButtonClick(PS))     processSoundCommand('D');
     }
   }
 
@@ -1010,45 +993,106 @@ void processSoundCommand(char soundCommand)
     if (PS3Nav2->PS3NavigationConnected) ps3soundControl(PS3Nav2, 2);
   }
 
-  void startAutoSounds()
+#ifdef TEST_CONROLLER
+  void testPS3Controller(PS3BT* myPS3 = PS3Nav)
   {
-    playAutoSounds = true;
-    soundStatus = 0;
-  }
-
-  void stopAutoSounds()
-  {
-    playAutoSounds = false;
-  }
-
-  void autoSounds()
-  {
-    long rndNum;
-    
-    if (soundStatus == 0)  // Sound is currently stopped - prepare for a future sound
-    {
-      soundStartTime = millis() + (random(soundAutoMinTime, soundAutoMaxTime) * 1000); // time between random moves
-      soundStatus = 1;
-
-    }
-
-    if (soundStatus == 1) // Sound is prepped - play when ready
-    {
-      if (soundStartTime < millis())
-        {
-           // play sound
-           int randomSound = random(10);
-           if (randomSound < 3) {
-              processSoundCommand('2');
-           } else if (randomSound < 6) {
-              processSoundCommand('3');
-           } else if (randomSound < 9) {
-              processSoundCommand('4');
-           } else if (randomSound == 9) {
-              processSoundCommand('6');
-           }
-            
-           soundStatus = 0; 
+    if (myPS3->PS3Connected || myPS3->PS3NavigationConnected) {
+      if (myPS3->getButtonPress(PS) && (myPS3->getAnalogHat(LeftHatX) > 137 || myPS3->getAnalogHat(LeftHatX) < 117 || myPS3->getAnalogHat(LeftHatY) > 137 || myPS3->getAnalogHat(LeftHatY) < 117 || myPS3->getAnalogHat(RightHatX) > 137 || myPS3->getAnalogHat(RightHatX) < 117 || myPS3->getAnalogHat(RightHatY) > 137 || myPS3->getAnalogHat(RightHatY) < 117)) {
+        output += "LeftHatX: ";
+        output += myPS3->getAnalogHat(LeftHatX);
+        output += "\tLeftHatY: ";
+        output += myPS3->getAnalogHat(LeftHatY);
+        if (myPS3->PS3Connected) { // The Navigation controller only have one joystick
+          output += "\tRightHatX: ";
+          output += myPS3->getAnalogHat(RightHatX);
+          output += "\tRightHatY: ";
+          output += myPS3->getAnalogHat(RightHatY);
         }
+      }
+      //Analog button values can be read from almost all buttons
+      if (myPS3->getButtonPress(PS) && (myPS3->getAnalogButton(L2) || myPS3->getAnalogButton(R2)))
+      {
+        if (output != "")
+          output += "\r\n";
+        output += "L2: ";
+        output += myPS3->getAnalogButton(L2);
+        if (myPS3->PS3Connected) {
+          output += "\tR2: ";
+          output += myPS3->getAnalogButton(R2);
+        }
+      }
+      if (myPS3->getButtonClick(L2)) {
+        output += " - L2";
+        //myPS3->disconnect();
+      }
+      if (myPS3->getButtonClick(R2)) {
+        output += " - R2";
+        //myPS3->disconnect();
+      }
+      if (output != "") {
+        Serial.println(output);
+        output = ""; // Reset output string
+      }
+      if (myPS3->getButtonClick(PS)) {
+        output += " - PS";
+        //myPS3->disconnect();
+      }
+      else {
+        if (myPS3->getButtonClick(TRIANGLE))
+          output += " - Traingle";
+        if (myPS3->getButtonClick(CIRCLE))
+          output += " - Circle";
+        if (myPS3->getButtonClick(CROSS))
+          output += " - Cross";
+        if (myPS3->getButtonClick(SQUARE))
+          output += " - Square";
+
+        if (myPS3->getButtonClick(UP)) {
+          output += " - Up";
+          if (myPS3->PS3Connected) {
+            myPS3->setLedOff();
+            myPS3->setLedOn(LED4);
+          }
+        }
+        if (myPS3->getButtonClick(RIGHT)) {
+          output += " - Right";
+          if (myPS3->PS3Connected) {
+            myPS3->setLedOff();
+            myPS3->setLedOn(LED1);
+          }
+        }
+        if (myPS3->getButtonClick(DOWN)) {
+          output += " - Down";
+          if (myPS3->PS3Connected) {
+            myPS3->setLedOff();
+            myPS3->setLedOn(LED2);
+          }
+        }
+        if (myPS3->getButtonClick(LEFT)) {
+          output += " - Left";
+          if (myPS3->PS3Connected) {
+            myPS3->setLedOff();
+            myPS3->setLedOn(LED3);
+          }
+        }
+
+        if (myPS3->getButtonClick(L1))
+          output += " - L1";
+        if (myPS3->getButtonClick(L3))
+          output += " - L3";
+        if (myPS3->getButtonClick(R1))
+          output += " - R1";
+        if (myPS3->getButtonClick(R3))
+          output += " - R3";
+
+        if (myPS3->getButtonClick(SELECT)) {
+          output += " - Select";
+          myPS3->printStatusString();
+        }
+        if (myPS3->getButtonClick(START)) {
+          output += " - Start";
+        }
+      }
     }
   }
+#endif
