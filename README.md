@@ -53,3 +53,24 @@ Thank you to:
 * Ben Black - MDFly Support
 * Joe McFly - Testing support
 * Christopher Edwards - MSE Variant this is modified from
+
+---
+
+A note on sounds and MDFly:  MDFly uses sounds based on order on the card, not file name.  I use the app FatSort - https://fatsort.sourceforge.io - for this.  
+
+
+1. Become root 
+```
+sudo su -
+```
+2. Go to FatSort directory - in my case it's the user home directory
+3. Unmount your SD card - in my case the volume is named MSE
+```
+diskutil unmount /Volumes/MSE
+```
+4. Run fatsort to order the files on the SD card by filename
+```
+./fatsort /dev/disk2s1
+```
+5. Re-mount SD - for some reason on my Mac I have to go into disk utility to do so.
+6. Clean eject SD - I use "CleanMyDrive 2" for this.  It allows you to eject and removes all of the extra files the Mac puts on the SD card.
