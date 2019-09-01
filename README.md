@@ -1,7 +1,7 @@
 Introducing S.H.A.D.O.W. (Small Handheld Arduino Droid Operating Wand) MSE Edition
 A MSE droid control system based on DanF's Padawan, and Darren Blum's S.H.A.D.O.W. that uses a PS3 Move Navigation Controller
 
-This is a fork of Darren Blum's S.H.A.D.O.W. system. It is specifically modified to support MSE (RC Car) Based Droids.
+This is a fork of Christopher Edwards' S.H.A.D.O.W. MSE Droid variant which is based on Darren Blum's S.H.A.D.O.W. system. It is specifically modified to support MSE (RC Car) Based Droids.
 
 It is a slimmed down version of the original code base to only support what is used on these types of droids.
 If you are already familiar with S.H.A.D.O.W. then this fork will feel very familiar.
@@ -12,6 +12,8 @@ The sketch supports the following MP3 players:
 
 * Sparkfun MP3Trigger: https://www.sparkfun.com/products/13720
 * MDFly MP3 Player: http://www.mdfly.com/products/sd-card-mp3-player-module-rs232-ttl.html
+
+(I have removed the RogueMP3 support for now)
 
 Pin Assignment:
 * Steering Servo: 4
@@ -50,3 +52,4 @@ Thank you to:
 * MSE Droid Builders Facebook page
 * Ben Black - MDFly Support
 * Joe McFly - Testing support
+* Christopher Edwards - MSE Variant this is modified from
