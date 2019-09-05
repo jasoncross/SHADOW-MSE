@@ -978,13 +978,13 @@ void processSoundCommand(char soundCommand)
       else if (myPS3->getButtonClick(L3))     processSoundCommand('R');
     }
     else if (myPS3->getButtonPress(L2)) {
-      if (myPS3->getButtonClick(UP))          processSoundCommand('7');
-      else if (myPS3->getButtonClick(RIGHT))  processSoundCommand('8');
-      else if (myPS3->getButtonClick(DOWN))   processSoundCommand('9');
-      else if (myPS3->getButtonClick(LEFT))   processSoundCommand('0');
-      else if (myPS3->getButtonClick(CIRCLE)) processSoundCommand('A');
-      else if (myPS3->getButtonClick(CROSS))  processSoundCommand('B');
-      else if (myPS3->getButtonClick(L3))     processSoundCommand('R');
+      if (myPS3->getButtonClick(UP))          processSoundCommand('2'); // DoDos
+      else if (myPS3->getButtonClick(RIGHT))  processSoundCommand('3'); // Scrambles
+      else if (myPS3->getButtonClick(DOWN))   processSoundCommand('4'); // Horns
+      else if (myPS3->getButtonClick(LEFT))   processSoundCommand('6'); // Droids
+      else if (myPS3->getButtonClick(CROSS))  processSoundCommand('5'); // Zaps
+      else if (myPS3->getButtonClick(CIRCLE)) processSoundCommand('1'); // Scream
+      else if (myPS3->getButtonClick(L3))     processSoundCommand('R'); // Random
     }
   }
 
